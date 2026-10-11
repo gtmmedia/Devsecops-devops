@@ -67,7 +67,8 @@ Stop with `Ctrl+C`; `docker compose down -v` also deletes the database volume.
 ```bash
 # backend (needs a PostgreSQL; the quickest is: docker compose up db -d  after adding ports: ["5432:5432"] to db)
 cd backend
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 export DATABASE_URL=postgresql+psycopg2://quickdesk:quickdesk-dev-only@localhost:5432/quickdesk
 alembic upgrade head
