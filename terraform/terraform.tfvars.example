@@ -1,0 +1,17 @@
+# Copy to terraform.tfvars and edit:   cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars is git-ignored. Do NOT put AWS access keys in any .tf or
+# .tfvars file: the AWS provider reads them from `aws configure` or the
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY environment variables.
+
+aws_region          = "ap-south-1"
+project_name        = "quickdesk"
+environment         = "demo"
+kubernetes_version  = "1.34"
+
+node_instance_types = ["t3.medium"]
+node_desired_size   = 3
+node_min_size       = 2
+node_max_size       = 4
+
+# Optional: extra identities that need kubectl access (e.g. a CI user).
+# admin_principal_arns = ["arn:aws:iam::123456789012:user/github-deployer"]

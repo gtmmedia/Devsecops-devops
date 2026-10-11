@@ -1,0 +1,20 @@
+QuickDesk {{ .Chart.AppVersion }} deployed to namespace "{{ .Release.Namespace }}".
+
+Check it:
+  kubectl get pods,svc,ingress,hpa -n {{ .Release.Namespace }}
+
+Open it:
+{{- if .Values.ingress.enabled }}
+  kubectl get ingress -n {{ .Release.Namespace }}      # ADDRESS column = load balancer
+  {{- if .Values.ingress.host }}
+  http://{{ .Values.ingress.host }}   (map it to that address in /etc/hosts)
+  {{- else }}
+  http://<ADDRESS>/
+  {{- end }}
+{{- else }}
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "quickdesk.fullname" . }}-frontend 3000:{{ .Values.service.frontendPort }}
+{{- end }}
+
+Backend API docs:
+  kubectl port-forward -n {{ .Release.Namespace }} svc/{{ include "quickdesk.fullname" . }}-backend 8000:{{ .Values.service.backendPort }}
+  http://localhost:8000/docs   and   http://localhost:8000/metrics

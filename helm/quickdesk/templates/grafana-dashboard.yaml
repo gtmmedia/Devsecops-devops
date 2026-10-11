@@ -1,0 +1,12 @@
+{{- if .Values.metrics.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "quickdesk.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "quickdesk.labels" . | nindent 4 }}
+    grafana_dashboard: "1" # the Grafana sidecar loads every ConfigMap with this label
+data:
+  quickdesk.json: |-
+    {{- .Files.Get "dashboards/quickdesk.json" | nindent 4 }}
+{{- end }}

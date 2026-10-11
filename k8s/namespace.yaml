@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quickdesk
+  labels:
+    app.kubernetes.io/name: quickdesk
+    # Kubernetes' built-in guard rails: warn if a pod asks for more than it should.
+    pod-security.kubernetes.io/warn: restricted

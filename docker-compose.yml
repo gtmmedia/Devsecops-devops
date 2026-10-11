@@ -1,0 +1,48 @@
+# Run the whole stack:  docker compose up --build
+#   frontend  http://localhost:3000
+#   backend   http://localhost:8000/docs
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-quickdesk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quickdesk-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-quickdesk}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-quickdesk}:${POSTGRES_PASSWORD:-quickdesk-dev-only}@db:5432/${POSTGRES_DB:-quickdesk}
+      CORS_ORIGINS: http://localhost:3000
+      RUN_MIGRATIONS: "true" # apply Alembic migrations on start
+      ENABLE_DEBUG_ENDPOINTS: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "3000:8080"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

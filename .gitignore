@@ -1,0 +1,35 @@
+# secrets - never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+terraform.tfvars
+*.auto.tfvars
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# node
+node_modules/
+frontend/dist/
+
+# terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+tfplan
+
+# helm / misc
+*.tgz
+.DS_Store
+.idea/
+.vscode/

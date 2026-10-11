@@ -1,0 +1,177 @@
+name: CI
+
+# Runs on every push to main (build, scan, publish, optionally deploy)
+# and on pull requests (test, build and scan only - nothing is published).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------ 1 ---
+  backend-test:
+    name: Backend lint and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      # A failing test fails this job, which blocks every job below.
+      - name: Run tests
+        run: pytest --cov=app --cov-report=term-missing
+
+  # ------------------------------------------------------------------ 2 ---
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+  # ------------------------------------------------------------------ 3 ---
+  # Build -> scan -> push, in that order, once per image. The image is only
+  # pushed to the registry if the security scan passes.
+  docker:
+    name: Image (${{ matrix.service }})
+    needs: [backend-test, frontend-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # needed to push to GHCR with GITHUB_TOKEN
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+    env:
+      OWNER: ${{ github.repository_owner }}
+      SERVICE: ${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the image name
+        id: meta
+        run: |
+          # Registry names must be lowercase; GitHub usernames may not be.
+          owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          echo "image=ghcr.io/${owner}/quickdesk-${SERVICE}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (kept local until it passes the scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          load: true
+          push: false
+          # The tag is the commit SHA, never "latest": every image maps to exactly one commit.
+          tags: ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # Pinned to a full commit SHA (not a tag): in March 2026 most trivy-action
+      # version tags were hijacked. A SHA can't be moved. Revisit when upgrading.
+      - name: Trivy scan (fails on HIGH or CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
+        with:
+          image-ref: ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true # only fail on CVEs that already have a fix
+          exit-code: "1" # non-zero exit = red pipeline
+          trivyignores: .trivyignore
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+        run: docker push "${IMAGE}:${GITHUB_SHA}"
+
+  # ------------------------------------------------------------------ 4 ---
+  # Optional continuous deployment. Off until you create the repository
+  # variable DEPLOY_ENABLED=true (Settings > Secrets and variables > Actions).
+  deploy:
+    name: Deploy to EKS
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    env:
+      OWNER: ${{ github.repository_owner }}
+      CLUSTER: ${{ vars.EKS_CLUSTER_NAME }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Point kubectl at the cluster
+        run: aws eks update-kubeconfig --name "$CLUSTER" --region "$AWS_REGION"
+
+      - name: Helm upgrade with the new image tag
+        run: |
+          owner="$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')"
+          helm upgrade --install quickdesk helm/quickdesk \
+            --namespace quickdesk --create-namespace \
+            --set backend.image.repository="ghcr.io/${owner}/quickdesk-backend" \
+            --set backend.image.tag="${GITHUB_SHA}" \
+            --set frontend.image.repository="ghcr.io/${owner}/quickdesk-frontend" \
+            --set frontend.image.tag="${GITHUB_SHA}" \
+            --wait --timeout 5m
+
+      - name: Show the result
+        run: kubectl get pods,svc,ingress,hpa -n quickdesk

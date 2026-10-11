@@ -1,0 +1,24 @@
+# Grafana half of the kube-prometheus-stack chart.
+# The admin password is NOT stored here. Either let the chart generate one:
+#   kubectl get secret -n monitoring monitoring-grafana -o jsonpath='{.data.admin-password}' | base64 -d
+# or choose your own at install time:   --set grafana.adminPassword='...'
+
+grafana:
+  enabled: true
+  defaultDashboardsTimezone: browser
+  service:
+    type: ClusterIP # reach it with: kubectl port-forward -n monitoring svc/monitoring-grafana 3001:80
+  persistence:
+    enabled: false # demo cluster: dashboards come from ConfigMaps anyway
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard # QuickDesk's chart labels its dashboard ConfigMap with this
+      labelValue: "1"
+      searchNamespace: ALL

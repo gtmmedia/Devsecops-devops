@@ -1,0 +1,35 @@
+# Prometheus half of the kube-prometheus-stack chart.
+# Install together with grafana-values.yaml (see README):
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     -n monitoring --create-namespace \
+#     -f monitoring/prometheus-values.yaml -f monitoring/grafana-values.yaml
+
+prometheus:
+  prometheusSpec:
+    # Scrape EVERY ServiceMonitor/PodMonitor/rule in the cluster, not only the
+    # ones labelled "release: monitoring". This is how QuickDesk's ServiceMonitor is found.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    scrapeInterval: 15s
+    retention: 24h # demo cluster: keep a day of data
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        memory: 1Gi
+
+# Demo cluster: fewer pods to fit on small nodes.
+alertmanager:
+  enabled: false
+
+# EKS hides the control plane, so these targets would always show as DOWN.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

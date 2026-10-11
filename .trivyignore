@@ -1,0 +1,4 @@
+# Accepted risks go here, one CVE id per line, each with a reason and a review date.
+# Example:
+#   CVE-2025-12345  # base image only, not reachable from our code. Review 2026-12-01
+# Keep this file empty unless you can justify every entry.
