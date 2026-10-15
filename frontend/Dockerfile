@@ -8,7 +8,7 @@ RUN npm run build
 
 # ---- Stage 2: serve the static files with nginx (no Node in the final image) ----
 # The "unprivileged" nginx image runs as a non-root user and listens on 8080.
-FROM nginxinc/nginx-unprivileged:1.28-alpine
+FROM nginxinc/nginx-unprivileged:1.30-alpine
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 ENV BACKEND_URL=http://backend:8000
