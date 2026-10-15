@@ -34,5 +34,4 @@ tfplan
 .idea/
 .vscode/
 
-docs
-screenshots
+docs-local
