@@ -10,7 +10,11 @@ WORKDIR /app
 
 # Install dependencies first so this layer is cached until requirements change.
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Then delete pip: the running app never needs a package manager, and pip bundles
+# its own copies of urllib3/msgpack/setuptools that vulnerability scanners flag.
+RUN pip install -r requirements.txt \
+ && pip uninstall -y pip \
+ && rm -rf /usr/local/lib/python3.12/ensurepip
 
 # Run as a non-root user (uid 10001) - required by the rubric and by
 # Kubernetes' runAsNonRoot check, which needs a *numeric* user id.
